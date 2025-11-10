@@ -42,13 +42,11 @@ function calcularInteresMensual(valorPrestamo) {
     return Math.round((valorPrestamo * tasa) / 100); // monto en pesos
   }
 
-/**
- * Crea un nuevo empeno
- */
+/*Crear nuevo empeño*/
+
 router.post("/", async (req, res) => {
   try {
     const {
-      numeroFactura,
       cliente,
       descripcionPrenda,
       kilataje,
@@ -57,12 +55,27 @@ router.post("/", async (req, res) => {
       fechaInicio,
     } = req.body;
 
-     // 🔹 Aquí generas automáticamente el nuevo numeroFactura
-     const ultimo = await Empeno.findOne().sort({ numeroFactura: -1 }).lean();
-     const nuevoNumeroFactura = ultimo ? ultimo.numeroFactura + 1 : 1;
+    // 🔹 Obtener capital actual
+    const capital = await Capital.findOne();
+    if (!capital) {
+      return res.status(500).json({ error: "No se ha inicializado el capital" });
+    }
 
+    // 🔹 Validar si hay suficiente saldo
+    if (capital.saldo < valorPrestamo) {
+      return res.status(400).json({
+        error: `No hay suficiente efectivo en caja. Saldo disponible: ${capital.saldo}`
+      });
+    }
+
+    // 🔹 Generar automáticamente el nuevo numeroFactura
+    const ultimo = await Empeno.findOne().sort({ numeroFactura: -1 }).lean();
+    const nuevoNumeroFactura = ultimo ? ultimo.numeroFactura + 1 : 1;
+
+    // 🔹 Calcular interés mensual
     const interesMensual = calcularInteresMensual(valorPrestamo);
 
+    // 🔹 Crear el nuevo empeño
     const nuevoEmpeno = new Empeno({
       numeroFactura: nuevoNumeroFactura,
       cliente,
@@ -74,26 +87,25 @@ router.post("/", async (req, res) => {
       fechaInicio,
     });
 
-    const guardado = await nuevoEmpeno.save();
-    res.status(201).json(guardado);
-     
-    // 3️⃣ Descontar capital
-     const capital = await Capital.findOne();
-     capital.saldo -= valorPrestamo;
-     await capital.save();
- 
-     res.status(201).json({
-       mensaje: "Empeño creado y capital actualizado",
-       empeno: nuevoEmpeno,
-       capitalActual: capital.saldo
-     });
+    await nuevoEmpeno.save();
+
+    // 🔹 Descontar el capital de la caja
+    capital.saldo -= valorPrestamo;
+    await capital.save();
+
+    res.status(201).json({
+      mensaje: "Empeño creado y capital actualizado",
+      empeno: nuevoEmpeno,
+      capitalActual: capital.saldo
+    });
+
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-/**
- * Obtener todos los empenos con intereses acumulados
+
+ /* Obtener todos los empenos con intereses acumulados
  */
 router.get("/", async (req, res) => {
   try {
