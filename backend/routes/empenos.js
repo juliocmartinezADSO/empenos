@@ -242,6 +242,13 @@ router.post("/:id/abonar", async (req, res) => {
           });
 
           restante -= interesesPendientes;
+
+          
+    // 🔹 Actualizar capital general con intereses
+    const capital = await Capital.findOne();
+    if (!capital) throw new Error("Capital no inicializado");
+    capital.saldo += interesesPendientes;
+    await capital.save();
       }
 
       // ==========================================
@@ -258,12 +265,19 @@ router.post("/:id/abonar", async (req, res) => {
       // ==========================================
       // 5️⃣ Registrar abono a capital
       // ==========================================
-      empeño.abonos.push({
-          fecha: new Date(),
-          monto: restante,
-          tipo: "capital"
-      });
-
+      if (restante > 0) {
+        empeño.abonos.push({
+            fecha: new Date(),
+            monto: restante,
+            tipo: "capital"
+        });
+    
+        // 🔹 Actualizar capital general con capital abonado
+        const capital = await Capital.findOne();
+        if (!capital) throw new Error("Capital no inicializado");
+        capital.saldo += restante;
+        await capital.save();
+    }
       const nuevoCapital = empeño.valorPrestamo - restante;
 
       // ==========================================
