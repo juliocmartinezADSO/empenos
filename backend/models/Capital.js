@@ -10,4 +10,5 @@ const capitalSchema = new mongoose.Schema({
 });
 
 const Capital = mongoose.model("Capital", capitalSchema);
+
 export default Capital;

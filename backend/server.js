@@ -3,6 +3,8 @@ import mongoose from "mongoose";
 import cors from "cors";
 import dotenv from "dotenv";
 import empenoRoutes from "./routes/empenos.js";
+import capitalRoutes from "./routes/capital.js"
+
 
 dotenv.config();
 
@@ -11,6 +13,8 @@ const app = express();
 // 🟢 Agrega esto antes de tus rutas
 app.use(express.json());
 app.use("/api/empenos", empenoRoutes);
+app.use("/api/capital", capitalRoutes);
+
 
 app.use(
   cors({
