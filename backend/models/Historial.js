@@ -2,6 +2,20 @@
 import mongoose from "mongoose";
 
 const historialSchema = new mongoose.Schema({
+  clienteId:{
+    type: mongoose.Schema.Types.ObjectId,
+    ref:"Empeño"
+
+  },
+  // clienteIdAct:{
+  //   type: mongoose.Schema.Types.ObjectId,
+  //   ref:"Empeño"
+
+  // },
+  cedulaCliente:{
+    type:String,
+    ref:"Empeño"
+  },
   tipoMovimiento: {
     type: String,
     required: true,

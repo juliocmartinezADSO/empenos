@@ -16,9 +16,8 @@ async function inicializarCapital() {
     await Historial.create({
       tipoMovimiento: "Inyeccion de capital",
       descripcion: `Se registró una inyeccion de capital por valor de $100 millones de pesos`,
-      monto:100000000
+      monto: 100000000,
     });
-
   }
 }
 inicializarCapital();
@@ -107,6 +106,8 @@ router.post("/", async (req, res) => {
     //Historial del empeño
     // después de crear el empeño exitosamente
     await Historial.create({
+      clienteId: nuevoEmpeno._id,
+      cedulaCliente: nuevoEmpeno.cliente.cedula,
       tipoMovimiento: "Nuevo empeño",
       descripcion: `Se registró un nuevo empeño por valor de ${monto}`,
       monto,
@@ -249,8 +250,10 @@ router.post("/:id/abonar", async (req, res) => {
 
       // 🟢 Historial: pago de intereses
       await Historial.create({
+        clienteId: empeño._id,
+        cedulaCliente: empeño.cliente.cedula,
         tipoMovimiento: "Pago de intereses",
-        descripcion: `El cliente ${empeño.cliente} pagó ${interesesPendientes} en intereses del contrato ${empeño.numeroFactura}`,
+        descripcion: `El cliente ${empeño.cliente.nombre} pagó ${interesesPendientes} en intereses del contrato ${empeño.numeroFactura}`,
         monto: interesesPendientes,
       });
     }
@@ -284,8 +287,11 @@ router.post("/:id/abonar", async (req, res) => {
 
       // 🟢 Historial: abono a capital
       await Historial.create({
+        clienteId: empeño._id,
+        //clientIdAct:nuevoEmpeno._id,
+        cedulaCliente: empeño.cliente.cedula,
         tipoMovimiento: "Abono a capital",
-        descripcion: `El cliente ${empeño.cliente} abonó ${restante} al capital del contrato ${empeño.numeroFactura}`,
+        descripcion: `El cliente ${empeño.cliente.nombre} abonó ${restante} al capital del contrato ${empeño.numeroFactura}`,
         monto: restante,
       });
     }
@@ -298,6 +304,8 @@ router.post("/:id/abonar", async (req, res) => {
       empeño.estado = "liquidado";
       await empeño.save();
       await Historial.create({
+        clienteId: empeño._id,
+        cedulaCliente: empeño.cliente.cedula,
         tipoMovimiento: "Liquidación total",
         descripcion: `El cliente ${empeño.cliente} liquidó completamente el contrato ${empeño.numeroFactura}`,
         monto: abono,
@@ -333,6 +341,8 @@ router.post("/:id/abonar", async (req, res) => {
 
     // 🟢 Historial: renovación de contrato
     await Historial.create({
+      clienteId: empeño._id,
+      cedulaCliente: empeño.cliente.cedula,
       tipoMovimiento: "Renovación de contrato",
       descripcion: `El cliente ${empeño.cliente} renovó su contrato ${empeño.numeroFactura} con nuevo préstamo de ${nuevoCapital}`,
       monto: nuevoCapital,
@@ -349,19 +359,38 @@ router.post("/:id/abonar", async (req, res) => {
   }
 });
 
-/**
- * Eliminar un empeno
- */
-router.delete("/:id", async (req, res) => {
+//Empeños activos
+router.get("/estado/:estado", async (req, res) => {
   try {
-    const eliminado = await Empeno.findByIdAndDelete(req.params.id);
-    if (!eliminado)
-      return res.status(404).json({ mensaje: "empeno no encontrado" });
+    const { estado } = req.params;
 
-    res.json({ mensaje: "empeno eliminado correctamente" });
+    const estadosValidos = ["activo", "atrasado", "renovado", "liquidado"];
+
+    if (!estadosValidos.includes(estado.toLowerCase())) {
+      return res.status(400).json({
+        error: `El estado '${estado}' no es válido. Estados permitidos: ${estadosValidos.join(
+          ", "
+        )}.`,
+      });
+    }
+
+    // Buscar los empeños con ese estado
+    const empenos = await Empeno.find({ estado }).sort({ fechaInicio: -1 });
+
+    if (!empenos.length) {
+      return res.status(404).json({ mensaje: `No se encontraron empeños con estado '${estado}'.` });
+    }
+
+    
+
+    res.json(empenos);
+  
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("Error al obtener los empeños por estado:", error);
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 });
+
+//Empeños liquidados
 
 export default router;
