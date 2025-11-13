@@ -14,7 +14,7 @@ router.get("/", async(req, res)=>{
     
       if(capital){
         return res.status(400).json({
-          capital:capital.saldo
+          capital:`${capital.saldo.toLocaleString("es-CO")} pesos COP`
         })
       }
   
@@ -101,7 +101,7 @@ router.get("/", async(req, res)=>{
         })
 
         res.json({
-            mensaje:`Se retiraron ${monto.toLocaleString("es-CO")} pesos de la caja.`,
+            mensaje:`Se retiraron ${monto.toLocaleString("es-CO")} pesos COP de la caja.`,
             saldoActual:capital.saldo
         })
 

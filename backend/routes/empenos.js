@@ -12,6 +12,13 @@ async function inicializarCapital() {
   if (!existe) {
     await new Capital({ saldo: 100000000 }).save(); // 100 millones
     console.log("Capital inicial creado: 100.000.000");
+
+    await Historial.create({
+      tipoMovimiento: "Inyeccion de capital",
+      descripcion: `Se registró una inyeccion de capital por valor de $100 millones de pesos`,
+      monto:100000000
+    });
+
   }
 }
 inicializarCapital();
