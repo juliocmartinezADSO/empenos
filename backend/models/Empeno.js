@@ -49,26 +49,6 @@ const empenoSchema = new mongoose.Schema({
   },
 });
 
-// 🔹 Calcular el interés y la fecha de vencimiento automáticamente
-// empenoSchema.pre("save", function (next) {
-//   if (this.isNew) {
-//     // Asignar interés mensual según el valor del préstamo
-//     if (this.valorPrestamo >= 100000 && this.valorPrestamo <= 900000) {
-//       this.interesMensual = 10; // 10%
-//     } else if (this.valorPrestamo > 900000 && this.valorPrestamo <= 1300000) {
-//       this.interesMensual = 7; // 7%
-//     } else if (this.valorPrestamo > 1300000) {
-//       this.interesMensual = 5; // 5%
-//     }
-
-//     // Calcular fecha de vencimiento (5 meses después)
-//     const fecha = new Date(this.fechaInicio);
-//     fecha.setMonth(fecha.getMonth() + 5);
-//     this.fechaVencimiento = fecha;
-//   }
-//   next();
-// });
-
 const Empeno = mongoose.model("Empeno", empenoSchema);
 
 export default Empeno;

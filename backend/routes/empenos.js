@@ -3,6 +3,7 @@ import express from "express";
 import Capital from "../models/Capital.js";
 import Empeno from "../models/Empeno.js";
 import Historial from "../models/Historial.js";
+import HistorialProcesos from "../models/HistorialProcesos.js";
 
 const router = express.Router();
 
@@ -105,18 +106,23 @@ router.post("/", async (req, res) => {
 
     //Historial del empeño
     // después de crear el empeño exitosamente
-    await Historial.create({
-      clienteId: nuevoEmpeno._id,
+    await HistorialProcesos.create({
+      contratoId: nuevoEmpeno._id,
       cedulaCliente: nuevoEmpeno.cliente.cedula,
-      tipoMovimiento: "Nuevo empeño",
-      descripcion: `Se registró un nuevo empeño por valor de ${monto}`,
+      tipoMovimiento: "empeno",
       monto,
+      saldoFinal: monto,
+      descripcion: `El cliente ${nuevoEmpeno.cliente.nombre} realizó un empeño por valor de ${monto}`,
+      detalle: {
+        factura: nuevoEmpeno.numeroFactura,
+        descripcionPrenda,
+        kilataje,
+      },
     });
 
     res.status(201).json({
-      mensaje: "Empeño creado y capital actualizado",
+      mensaje: "Empeño exitoso",
       empeno: nuevoEmpeno,
-      capitalActual: capital.saldo,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -220,7 +226,49 @@ router.post("/:id/abonar", async (req, res) => {
     const interesesPendientes = interesesTotales - interesesPagados;
 
     // ==========================================
-    // 2️⃣ Validación de interés completo
+    // 2️⃣ Detectar liquidación TOTAL en un SOLO pago
+    // ==========================================
+    // ==========================================
+    // 2️⃣ Detectar liquidación TOTAL en un SOLO pago
+    // ==========================================
+    const capitalPendiente = empeño.valorPrestamo;
+    const totalParaLiquidar = interesesPendientes + capitalPendiente;
+
+    if (abono === totalParaLiquidar) {
+      // Actualizar capital recibiendo el capital prestado
+      const capital = await Capital.findOne();
+      capital.saldo += capitalPendiente + interesesPendientes;
+      await capital.save();
+
+      // Liquidar contrato
+      empeño.estado = "liquidado";
+      await empeño.save();
+
+      // Historial ÚNICO
+      await HistorialProcesos.create({
+        contratoId: empeño._id,
+        contratoNuevoId: null,
+        cedulaCliente: empeño.cliente.cedula,
+        tipoMovimiento: "liquidacion",
+        monto: abono,
+        saldoFinal: 0,
+        descripcion: `Liquidación total del contrato ${empeño.numeroFactura}`,
+        detalle: {
+          factura: empeño.numeroFactura,
+          descripcionPrenda: empeño.descripcionPrenda,
+          kilataje: empeño.kilataje,
+          fecha: new Date(),
+        },
+      });
+
+      return res.json({
+        mensaje: "Contrato liquidado completamente en un solo pago.",
+        contrato: empeño,
+      });
+    }
+
+    // ==========================================
+    // 3️⃣ Validación de pago de intereses
     // ==========================================
     if (abono < interesesPendientes) {
       return res.status(400).json({
@@ -229,7 +277,7 @@ router.post("/:id/abonar", async (req, res) => {
     }
 
     // ==========================================
-    // 3️⃣ Registrar interés
+    // 4️⃣ Registrar pago de intereses (solo si NO hubo liquidación total)
     // ==========================================
     let restante = abono;
 
@@ -242,19 +290,26 @@ router.post("/:id/abonar", async (req, res) => {
 
       restante -= interesesPendientes;
 
-      // 🔹 Actualizar capital general con intereses
       const capital = await Capital.findOne();
       if (!capital) throw new Error("Capital no inicializado");
       capital.saldo += interesesPendientes;
       await capital.save();
 
-      // 🟢 Historial: pago de intereses
-      await Historial.create({
-        clienteId: empeño._id,
+      // Historial de intereses
+      await HistorialProcesos.create({
+        contratoId: empeño._id,
+        contratoNuevoId: null,
         cedulaCliente: empeño.cliente.cedula,
-        tipoMovimiento: "Pago de intereses",
-        descripcion: `El cliente ${empeño.cliente.nombre} pagó ${interesesPendientes} en intereses del contrato ${empeño.numeroFactura}`,
+        tipoMovimiento: "abono_interes",
         monto: interesesPendientes,
+        saldoFinal: empeño.valorPrestamo,
+        descripcion: `Pago de intereses por ${interesesPendientes} del contrato ${empeño.numeroFactura}`,
+        detalle: {
+          factura: empeño.numeroFactura,
+          descripcionPrenda: empeño.descripcionPrenda,
+          kilataje: empeño.kilataje,
+          fecha: new Date(),
+        },
       });
     }
 
@@ -272,29 +327,7 @@ router.post("/:id/abonar", async (req, res) => {
     // ==========================================
     // 5️⃣ Registrar abono a capital
     // ==========================================
-    if (restante > 0) {
-      empeño.abonos.push({
-        fecha: new Date(),
-        monto: restante,
-        tipo: "capital",
-      });
 
-      // 🔹 Actualizar capital general con capital abonado
-      const capital = await Capital.findOne();
-      if (!capital) throw new Error("Capital no inicializado");
-      capital.saldo += restante;
-      await capital.save();
-
-      // 🟢 Historial: abono a capital
-      await Historial.create({
-        clienteId: empeño._id,
-        //clientIdAct:nuevoEmpeno._id,
-        cedulaCliente: empeño.cliente.cedula,
-        tipoMovimiento: "Abono a capital",
-        descripcion: `El cliente ${empeño.cliente.nombre} abonó ${restante} al capital del contrato ${empeño.numeroFactura}`,
-        monto: restante,
-      });
-    }
     const nuevoCapital = empeño.valorPrestamo - restante;
 
     // ==========================================
@@ -303,12 +336,21 @@ router.post("/:id/abonar", async (req, res) => {
     if (nuevoCapital <= 0) {
       empeño.estado = "liquidado";
       await empeño.save();
-      await Historial.create({
-        clienteId: empeño._id,
+
+      await HistorialProcesos.create({
+        contratoId: empeño._id,
+        contratoNuevoId: null,
         cedulaCliente: empeño.cliente.cedula,
-        tipoMovimiento: "Liquidación total",
-        descripcion: `El cliente ${empeño.cliente} liquidó completamente el contrato ${empeño.numeroFactura}`,
+        tipoMovimiento: "liquidacion",
         monto: abono,
+        saldoFinal: 0,
+        descripcion: `Liquidación total del contrato ${empeño.numeroFactura}`,
+        detalle: {
+          factura: empeño.numeroFactura,
+          descripcionPrenda: empeño.descripcionPrenda,
+          kilataje: empeño.kilataje,
+          fecha: new Date(),
+        },
       });
       return res.json({
         mensaje: "Contrato liquidado completamente.",
@@ -321,6 +363,10 @@ router.post("/:id/abonar", async (req, res) => {
     // ==========================================
     empeño.estado = "liquidado";
     await empeño.save();
+    // 🔹 Sumar capital recuperado en la renovación
+    const capital = await Capital.findOne();
+    capital.saldo += restante; // este "restante" es el abono a capital
+    await capital.save();
 
     const nuevoContrato = new Empeno({
       cliente: empeño.cliente,
@@ -340,12 +386,20 @@ router.post("/:id/abonar", async (req, res) => {
     await nuevoContrato.save();
 
     // 🟢 Historial: renovación de contrato
-    await Historial.create({
-      clienteId: empeño._id,
+    await HistorialProcesos.create({
+      contratoId: empeño._id,
+      contratoNuevoId: nuevoContrato._id,
       cedulaCliente: empeño.cliente.cedula,
-      tipoMovimiento: "Renovación de contrato",
-      descripcion: `El cliente ${empeño.cliente} renovó su contrato ${empeño.numeroFactura} con nuevo préstamo de ${nuevoCapital}`,
+      tipoMovimiento: "renovacion",
       monto: nuevoCapital,
+      saldoFinal: nuevoCapital,
+      descripcion: `Renovación del contrato ${empeño.numeroFactura} → nuevo contrato ${nuevoContrato.numeroFactura} por valor ${nuevoCapital}`,
+      detalle: {
+        factura: nuevoContrato.numeroFactura,
+        descripcionPrenda: nuevoContrato.descripcionPrenda,
+        kilataje: nuevoContrato.kilataje,
+        fecha: new Date(),
+      },
     });
 
     return res.json({
@@ -378,13 +432,12 @@ router.get("/estado/:estado", async (req, res) => {
     const empenos = await Empeno.find({ estado }).sort({ fechaInicio: -1 });
 
     if (!empenos.length) {
-      return res.status(404).json({ mensaje: `No se encontraron empeños con estado '${estado}'.` });
+      return res
+        .status(404)
+        .json({ mensaje: `No se encontraron empeños con estado '${estado}'.` });
     }
 
-    
-
     res.json(empenos);
-  
   } catch (error) {
     console.error("Error al obtener los empeños por estado:", error);
     res.status(500).json({ error: "Error interno del servidor" });

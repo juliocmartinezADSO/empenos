@@ -13,7 +13,7 @@ router.get("/", async(req, res)=>{
       const capital = await Capital.findOne();
     
       if(capital){
-        return res.status(400).json({
+        return res.status(200).json({
           capital:`${capital.saldo.toLocaleString("es-CO")} pesos COP`
         })
       }
