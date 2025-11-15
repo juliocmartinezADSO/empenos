@@ -1,6 +1,11 @@
 import mongoose from "mongoose";
 
 const empenoSchema = new mongoose.Schema({
+  contratoPadreId: {
+  type: mongoose.Schema.Types.ObjectId,
+  required: false,
+},
+
   numeroFactura: {
     type: Number,
     required: true,

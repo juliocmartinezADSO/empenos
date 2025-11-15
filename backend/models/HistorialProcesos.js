@@ -12,6 +12,10 @@ const historialSchema = new mongoose.Schema({
     ref: "Empeño",
     default: null,
   },
+  contratoPadreId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Empeño",
+  },
 
   cedulaCliente: {
     type: String,
@@ -26,7 +30,7 @@ const historialSchema = new mongoose.Schema({
       "abono_capital",
       "renovacion",
       "liquidacion",
-      "desempeno"
+      "desempeno",
     ],
     required: true,
   },

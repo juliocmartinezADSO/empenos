@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import empenoRoutes from "./routes/empenos.js";
 import capitalRoutes from "./routes/capital.js"
 import historialRoutes from "./routes/historial.js"
+import contabilidadRoutes from "./routes/contabilidad.js"
 
 
 dotenv.config();
@@ -16,6 +17,7 @@ app.use(express.json());
 app.use("/api/empenos", empenoRoutes);
 app.use("/api/capital", capitalRoutes);
 app.use("/api/historial", historialRoutes)
+app.use("/api/contabilidad", contabilidadRoutes)
 
 
 app.use(

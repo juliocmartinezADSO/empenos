@@ -7,11 +7,7 @@ const historialSchema = new mongoose.Schema({
     ref:"Empeño"
 
   },
-  // clienteIdAct:{
-  //   type: mongoose.Schema.Types.ObjectId,
-  //   ref:"Empeño"
 
-  // },
   cedulaCliente:{
     type:String,
     ref:"Empeño"

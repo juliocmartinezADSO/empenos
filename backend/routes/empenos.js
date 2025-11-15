@@ -95,6 +95,8 @@ router.post("/", async (req, res) => {
       valorPrestamo,
       interesMensual,
       fechaInicio,
+
+      contratoPadreId: null, // temporal, se define luego
     });
 
     await nuevoEmpeno.save();
@@ -102,12 +104,17 @@ router.post("/", async (req, res) => {
     // 🔹 Descontar el capital de la caja
     capital.saldo -= valorPrestamo;
     const monto = valorPrestamo;
+
+    nuevoEmpeno.contratoPadreId = nuevoEmpeno._id;
+    await nuevoEmpeno.save();
+
     await capital.save();
 
     //Historial del empeño
     // después de crear el empeño exitosamente
     await HistorialProcesos.create({
       contratoId: nuevoEmpeno._id,
+      contratoPadreId: nuevoEmpeno.contratoPadreId,
       cedulaCliente: nuevoEmpeno.cliente.cedula,
       tipoMovimiento: "empeno",
       monto,
@@ -248,6 +255,7 @@ router.post("/:id/abonar", async (req, res) => {
       await HistorialProcesos.create({
         contratoId: empeño._id,
         contratoNuevoId: null,
+        contratoPadreId: empeño.contratoPadreId,
         cedulaCliente: empeño.cliente.cedula,
         tipoMovimiento: "liquidacion",
         monto: abono,
@@ -299,6 +307,7 @@ router.post("/:id/abonar", async (req, res) => {
       await HistorialProcesos.create({
         contratoId: empeño._id,
         contratoNuevoId: null,
+        contratoPadreId: empeño.contratoPadreId,
         cedulaCliente: empeño.cliente.cedula,
         tipoMovimiento: "abono_interes",
         monto: interesesPendientes,
@@ -340,6 +349,7 @@ router.post("/:id/abonar", async (req, res) => {
       await HistorialProcesos.create({
         contratoId: empeño._id,
         contratoNuevoId: null,
+        contratoPadreId: empeño.contratoPadreId,
         cedulaCliente: empeño.cliente.cedula,
         tipoMovimiento: "liquidacion",
         monto: abono,
@@ -381,6 +391,7 @@ router.post("/:id/abonar", async (req, res) => {
       fechaInicio: new Date(),
       estado: "activo",
       abonos: [],
+      contratoPadreId: empeño.contratoPadreId,
     });
 
     await nuevoContrato.save();
@@ -389,9 +400,11 @@ router.post("/:id/abonar", async (req, res) => {
     await HistorialProcesos.create({
       contratoId: empeño._id,
       contratoNuevoId: nuevoContrato._id,
+      contratoPadreId: empeño.contratoPadreId,
+
       cedulaCliente: empeño.cliente.cedula,
       tipoMovimiento: "renovacion",
-      monto: nuevoCapital,
+      monto: restante,
       saldoFinal: nuevoCapital,
       descripcion: `Renovación del contrato ${empeño.numeroFactura} → nuevo contrato ${nuevoContrato.numeroFactura} por valor ${nuevoCapital}`,
       detalle: {
