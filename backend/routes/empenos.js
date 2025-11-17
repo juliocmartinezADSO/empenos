@@ -241,6 +241,14 @@ router.post("/:id/abonar", async (req, res) => {
     const capitalPendiente = empeño.valorPrestamo;
     const totalParaLiquidar = interesesPendientes + capitalPendiente;
 
+    // ❌ Bloquear pagos mayores a lo que realmente se debe
+    if (abono > totalParaLiquidar) {
+      return res.status(400).json({
+        message: "El abono excede el valor total pendiente.",
+        totalPendiente: totalParaLiquidar,
+      });
+    }
+
     if (abono === totalParaLiquidar) {
       // Actualizar capital recibiendo el capital prestado
       const capital = await Capital.findOne();
@@ -276,43 +284,50 @@ router.post("/:id/abonar", async (req, res) => {
     }
 
     // ==========================================
-    // 3️⃣ Validación de pago de intereses
+    // 3️⃣ NUEVA VALIDACIÓN — pago mínimo: 1 mes
     // ==========================================
-    if (abono < interesesPendientes) {
+    if (abono < empeño.interesMensual) {
       return res.status(400).json({
-        error: `Debes pagar intereses completos: ${interesesPendientes}`,
+        error: `El pago mínimo es 1 mes de interés: ${empeño.interesMensual} pesos.`,
       });
     }
 
     // ==========================================
-    // 4️⃣ Registrar pago de intereses (solo si NO hubo liquidación total)
+    // 4️⃣ Calcular cuántos meses paga realmente
     // ==========================================
-    let restante = abono;
+    const mesesPagados = Math.floor(abono / empeño.interesMensual);
 
-    if (interesesPendientes > 0) {
+    // Intereses reales a pagar según lo que debe
+    const interesesAPagar = Math.min(
+      mesesPagados * empeño.interesMensual,
+      interesesPendientes
+    );
+
+    // Parte del abono que queda después de pagar los intereses
+    let restante = abono - interesesAPagar;
+
+    // Registrar los intereses pagados
+    if (interesesAPagar > 0) {
       empeño.abonos.push({
         fecha: new Date(),
-        monto: interesesPendientes,
+        monto: interesesAPagar,
         tipo: "interes",
       });
 
-      restante -= interesesPendientes;
-
       const capital = await Capital.findOne();
-      if (!capital) throw new Error("Capital no inicializado");
-      capital.saldo += interesesPendientes;
+      capital.saldo += interesesAPagar;
       await capital.save();
 
-      // Historial de intereses
+      // Historial
       await HistorialProcesos.create({
         contratoId: empeño._id,
         contratoNuevoId: null,
         contratoPadreId: empeño.contratoPadreId,
         cedulaCliente: empeño.cliente.cedula,
         tipoMovimiento: "abono_interes",
-        monto: interesesPendientes,
+        monto: interesesAPagar,
         saldoFinal: empeño.valorPrestamo,
-        descripcion: `Pago de intereses por ${interesesPendientes} del contrato ${empeño.numeroFactura}`,
+        descripcion: `Pago de ${mesesPagados} mes(es) de interés del contrato ${empeño.numeroFactura}`,
         detalle: {
           factura: empeño.numeroFactura,
           descripcionPrenda: empeño.descripcionPrenda,
@@ -323,14 +338,37 @@ router.post("/:id/abonar", async (req, res) => {
     }
 
     // ==========================================
-    // 4️⃣ Si solo se pagó interés
+    // 4️⃣ Si solo se pagaron intereses
     // ==========================================
     if (restante === 0) {
+      // Cálculo actualizado de intereses después del pago
+      const interesesRestantes = interesesPendientes - interesesAPagar;
+
       await empeño.save();
-      return res.json({
-        mensaje: "Intereses pagados. Contrato al día.",
-        contrato: empeño,
-      });
+
+      // Caso 1: Pagó solo 1 mes
+      if (mesesPagados === 1 && interesesRestantes > 0) {
+        return res.json({
+          mensaje: "Interés pagado.",
+          contrato: empeño,
+        });
+      }
+
+      // Caso 2: Pagó varios meses pero aún debe
+      if (mesesPagados > 1 && interesesRestantes > 0) {
+        return res.json({
+          mensaje: "Intereses abonados parcialmente.",
+          contrato: empeño,
+        });
+      }
+
+      // Caso 3: Ya quedó al día
+      if (interesesRestantes === 0) {
+        return res.json({
+          mensaje: "Intereses pagados. Contrato al día.",
+          contrato: empeño,
+        });
+      }
     }
 
     // ==========================================
