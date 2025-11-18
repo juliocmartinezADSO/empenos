@@ -6,6 +6,7 @@ import empenoRoutes from "./routes/empenos.js";
 import capitalRoutes from "./routes/capital.js"
 import historialRoutes from "./routes/historial.js"
 import contabilidadRoutes from "./routes/contabilidad.js"
+import cierreCajaRoutes from "./routes/cierrecaja.js"
 
 
 dotenv.config();
@@ -18,6 +19,7 @@ app.use("/api/empenos", empenoRoutes);
 app.use("/api/capital", capitalRoutes);
 app.use("/api/historial", historialRoutes)
 app.use("/api/contabilidad", contabilidadRoutes)
+app.use("/api/cierrecaja", cierreCajaRoutes)
 
 
 app.use(

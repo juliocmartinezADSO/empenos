@@ -11,13 +11,15 @@ const router = express.Router();
 async function inicializarCapital() {
   const existe = await Capital.findOne();
   if (!existe) {
-    await new Capital({ saldo: 100000000 }).save(); // 100 millones
+    await new Capital({ saldoInicial: 100000000, saldo:100000000 }).save(); // 100 millones
     console.log("Capital inicial creado: 100.000.000");
 
     await Historial.create({
-      tipoMovimiento: "Inyeccion de capital",
+      tipoMovimiento: "Inyección de capital",
       descripcion: `Se registró una inyeccion de capital por valor de $100 millones de pesos`,
       monto: 100000000,
+      esCapitalInicial: true,
+
     });
   }
 }

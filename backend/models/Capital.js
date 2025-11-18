@@ -2,6 +2,12 @@
 import mongoose from "mongoose";
 
 const capitalSchema = new mongoose.Schema({
+  saldoInicial: {
+    type: Number,
+    required: true,
+    default: 0,
+  },  
+  
   saldo: {
     type: Number,
     required: true,

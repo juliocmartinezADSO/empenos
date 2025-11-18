@@ -28,6 +28,10 @@ const historialSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  esCapitalInicial: {
+    type: Boolean,
+    default: false, // por defecto es false; solo true cuando es la inyección inicial
+  }
 });
 
 export default mongoose.model("Historial", historialSchema);
