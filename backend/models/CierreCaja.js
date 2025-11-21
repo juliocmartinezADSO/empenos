@@ -1,6 +1,8 @@
 import mongoose from "mongoose";
 
 const cierreCajaSchema = new mongoose.Schema({
+    fechaReal: { type: Date, required: true },       // ← cuando se hizo realmente
+
   fecha: {
     type: Date,
     required: true,

@@ -5,11 +5,14 @@ import HistorialProcesos from "../models/HistorialProcesos.js";
 import Empeno from "../models/Empeno.js";
 import Capital from "../models/Capital.js";
 import Historial from "../models/Historial.js";
+import fechaOperacion from "../middlewares/fechaOperacion.js";
 
 
 const router = express.Router();
 
-router.post("/generar", async (req, res) => {
+router.post("/generar",  fechaOperacion, async (req, res) => {
+  const fechaOp = req.fechaOperacion;
+  const timestamp = req.timestamp;
   try {
     const { 
       dineroReal = 0,
@@ -31,10 +34,6 @@ router.post("/generar", async (req, res) => {
     if (existeCierre) {
       return res.status(400).json({ error: "Ya realizaste el cierre de caja del día de hoy." });
     }
-
-// =============================
-// SALDO ANTERIOR CORREGIDO
-// =============================
 
 // =============================
 // SALDO ANTERIOR CORREGIDO
@@ -162,6 +161,7 @@ else {
     // 6️⃣ Guardar cierre en la base de datos (misma estructura que tenías)
     const cierre = await CierreCaja.create({
       fecha: hoy,
+      fechaReal: req.timestamp,
       saldoAnterior,
       capitalDesempenado,
       facturasDesempenadas,

@@ -2,15 +2,14 @@
 import mongoose from "mongoose";
 
 const historialSchema = new mongoose.Schema({
-  clienteId:{
+  clienteId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref:"Empeño"
-
+    ref: "Empeño",
   },
 
-  cedulaCliente:{
-    type:String,
-    ref:"Empeño"
+  cedulaCliente: {
+    type: String,
+    ref: "Empeño",
   },
   tipoMovimiento: {
     type: String,
@@ -24,6 +23,8 @@ const historialSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
+  fechaReal: { type: Date, required: true }, // ← hora real de Colombia
+
   fecha: {
     type: Date,
     default: Date.now,
@@ -31,7 +32,7 @@ const historialSchema = new mongoose.Schema({
   esCapitalInicial: {
     type: Boolean,
     default: false, // por defecto es false; solo true cuando es la inyección inicial
-  }
+  },
 });
 
 export default mongoose.model("Historial", historialSchema);

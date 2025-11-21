@@ -4,14 +4,16 @@ import Capital from "../models/Capital.js";
 import Empeno from "../models/Empeno.js";
 import Historial from "../models/Historial.js";
 import HistorialProcesos from "../models/HistorialProcesos.js";
+import fechaOperacion from "../middlewares/fechaOperacion.js";
 
 const router = express.Router();
 
 //Inicializar capital
 async function inicializarCapital() {
+  const timestamp = new Date();
   const existe = await Capital.findOne();
   if (!existe) {
-    await new Capital({ saldoInicial: 100000000, saldo:100000000 }).save(); // 100 millones
+    await new Capital({ saldoInicial: 100000000, saldo: 100000000 }).save(); // 100 millones
     console.log("Capital inicial creado: 100.000.000");
 
     await Historial.create({
@@ -19,7 +21,7 @@ async function inicializarCapital() {
       descripcion: `Se registró una inyeccion de capital por valor de $100 millones de pesos`,
       monto: 100000000,
       esCapitalInicial: true,
-
+      fechaReal: timestamp,
     });
   }
 }
@@ -54,7 +56,10 @@ function calcularInteresMensual(valorPrestamo) {
 
 /*Crear nuevo empeño*/
 
-router.post("/", async (req, res) => {
+router.post("/", fechaOperacion, async (req, res) => {
+  const fechaOp = req.fechaOperacion;
+  const timestamp = req.timestamp;
+
   try {
     const {
       cliente,
@@ -96,8 +101,8 @@ router.post("/", async (req, res) => {
       articulo,
       valorPrestamo,
       interesMensual,
-      fechaInicio,
-
+      fechaInicio: fechaOp,
+      fechaReal: timestamp,
       contratoPadreId: null, // temporal, se define luego
     });
 
@@ -121,6 +126,7 @@ router.post("/", async (req, res) => {
       tipoMovimiento: "empeno",
       monto,
       saldoFinal: monto,
+      fechaReal: timestamp,
       descripcion: `El cliente ${nuevoEmpeno.cliente.nombre} realizó un empeño por valor de ${monto}`,
       detalle: {
         factura: nuevoEmpeno.numeroFactura,
@@ -201,7 +207,9 @@ async function generarNuevaFactura() {
 //  Crea contrato nuevo al abonar capital
 // ==========================================================
 // POST /api/empenos/:id/abonar
-router.post("/:id/abonar", async (req, res) => {
+router.post("/:id/abonar", fechaOperacion, async (req, res) => {
+  const fechaOp = req.fechaOperacion;
+  const timestamp = req.timestamp;
   try {
     const { id } = req.params;
     const { abono } = req.body;
@@ -233,10 +241,6 @@ router.post("/:id/abonar", async (req, res) => {
       .reduce((sum, a) => sum + a.monto, 0);
 
     const interesesPendientes = interesesTotales - interesesPagados;
-
-    // ==========================================
-    // 2️⃣ Detectar liquidación TOTAL en un SOLO pago
-    // ==========================================
     // ==========================================
     // 2️⃣ Detectar liquidación TOTAL en un SOLO pago
     // ==========================================
@@ -275,8 +279,9 @@ router.post("/:id/abonar", async (req, res) => {
           factura: empeño.numeroFactura,
           descripcionPrenda: empeño.descripcionPrenda,
           kilataje: empeño.kilataje,
-          fecha: new Date(),
+          fecha: fechaOp,
         },
+        fechaReal: timestamp,
       });
 
       return res.json({
@@ -311,7 +316,7 @@ router.post("/:id/abonar", async (req, res) => {
     // Registrar los intereses pagados
     if (interesesAPagar > 0) {
       empeño.abonos.push({
-        fecha: new Date(),
+        fecha: fechaOp,
         monto: interesesAPagar,
         tipo: "interes",
       });
@@ -334,8 +339,9 @@ router.post("/:id/abonar", async (req, res) => {
           factura: empeño.numeroFactura,
           descripcionPrenda: empeño.descripcionPrenda,
           kilataje: empeño.kilataje,
-          fecha: new Date(),
+          fecha: fechaOp,
         },
+        fechaReal: timestamp,
       });
     }
 
@@ -399,8 +405,9 @@ router.post("/:id/abonar", async (req, res) => {
           factura: empeño.numeroFactura,
           descripcionPrenda: empeño.descripcionPrenda,
           kilataje: empeño.kilataje,
-          fecha: new Date(),
+          fecha: fechaOp,
         },
+        fechaReal: timestamp,
       });
       return res.json({
         mensaje: "Contrato liquidado completamente.",
@@ -428,7 +435,8 @@ router.post("/:id/abonar", async (req, res) => {
       // ✅ INTERÉS ACTUALIZADO AQUÍ
       interesMensual: calcularInteresMensual(nuevoCapital),
 
-      fechaInicio: new Date(),
+      fechaInicio: fechaOp,
+      fechaReal: timestamp,
       estado: "activo",
       abonos: [],
       contratoPadreId: empeño.contratoPadreId,
@@ -451,8 +459,10 @@ router.post("/:id/abonar", async (req, res) => {
         factura: nuevoContrato.numeroFactura,
         descripcionPrenda: nuevoContrato.descripcionPrenda,
         kilataje: nuevoContrato.kilataje,
-        fecha: new Date(),
+        fecha: fechaOp,
       },
+      fechaReal: timestamp,
+
     });
 
     return res.json({

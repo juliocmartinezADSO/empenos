@@ -33,6 +33,8 @@ const empenoSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
+    fechaReal: { type: Date, required: true },        // ← hora real
+
   fechaInicio: {
     type: Date,
     default: Date.now,

@@ -54,11 +54,12 @@ const historialSchema = new mongoose.Schema({
     type: Object,
     default: {},
   },
+  fechaReal: { type: Date, required: true },       // ← hora real de Colombia
 
   fecha: {
     type: Date,
-    default: Date.now,
-  },
+    default: Date.now
+    },
 });
 
 export default mongoose.model("HistorialProcesos", historialSchema);

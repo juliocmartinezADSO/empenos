@@ -9,6 +9,7 @@ const router = express.Router();
  * Si envías también el contratoPadreId → trae solo un empeño específico
  */
 router.get("/cliente/:cedula", async (req, res) => {
+  
   try {
     const { cedula } = req.params;
     const { padre } = req.query; // ← opcional
