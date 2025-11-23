@@ -1,4 +1,6 @@
 import express from "express";
+import authJWT from "../middlewares/authJWT.js";
+import checkRole from "../middlewares/checkRole.js";
 import Capital from "../models/Capital.js";
 import Historial from "../models/Historial.js";
 import fechaOperacion from "../middlewares/fechaOperacion.js";
@@ -7,7 +9,7 @@ import fechaOperacion from "../middlewares/fechaOperacion.js";
 const router = express.Router();
 
 // Ruta para conocer el capital disponible
-router.get("/", async (req, res) => {
+router.get("/", authJWT, checkRole("admin", "empleado"), async (req, res) => {
   try {
     const capital = await Capital.findOne();
     if (!capital) {
@@ -25,7 +27,7 @@ router.get("/", async (req, res) => {
 });
 
 // Ruta para inyectar capital al negocio
-router.post("/inyectar", fechaOperacion, async (req, res) => {
+router.post("/inyectar", authJWT, checkRole("admin", "empleado"), fechaOperacion, async (req, res) => {
   const fechaOp = req.fechaOperacion;
   const timestamp = req.timestamp;
   try {
@@ -68,7 +70,7 @@ router.post("/inyectar", fechaOperacion, async (req, res) => {
 });
 
 // Ruta para retirar dinero de la caja
-router.post("/retirar", async (req, res) => {
+router.post("/retirar", authJWT, checkRole("admin", "empleado"), fechaOperacion, async (req, res) => {
   const fechaOp = req.fechaOperacion;
   const timestamp = req.timestamp;
   try {

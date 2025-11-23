@@ -1,4 +1,5 @@
 import express from "express";
+import authJWT from "../middlewares/authJWT.js";
 import Historial from "../models/HistorialProcesos.js";
 const router = express.Router();
 
@@ -48,7 +49,7 @@ function calcularContabilidad(historial) {
 // RUTA: CONTABILIDAD POR CLIENTE + ID PADRE
 // ---------------------------------------------
 // GET /contabilidad/:cedula/:idPadre
-router.get("/:cedula/:idPadre", async (req, res) => {
+router.get("/:cedula/:idPadre", authJWT, async (req, res) => {
   try {
     const { cedula, idPadre } = req.params;
 

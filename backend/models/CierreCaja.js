@@ -17,6 +17,7 @@ const cierreCajaSchema = new mongoose.Schema({
 
   interesesGenerados: { type: Number, default: 0 },
   abonosIntereses: { type: Number, default: 0 },
+  totalRetirosHoy: { type: Number, default: 0 },
 
   otrosIngresos: { type: Number, default: 0 },
 
@@ -25,6 +26,7 @@ const cierreCajaSchema = new mongoose.Schema({
   // EGRESOS
   capitalPrestado: { type: Number, default: 0 },
   numeroEmpeños: { type: Number, default: 0 },
+  totalInyeccionesHoy: { type: Number, default: 0 },
 
   gastosGenerales: { type: Number, default: 0 },
   prestamosEmpleados: { type: Number, default: 0 },

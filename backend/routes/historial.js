@@ -1,4 +1,6 @@
 import express from "express";
+import authJWT from "../middlewares/authJWT.js";
+import checkRole from "../middlewares/checkRole.js";
 import HistorialProcesos from "../models/HistorialProcesos.js";
 
 const router = express.Router();
@@ -8,7 +10,7 @@ const router = express.Router();
  * Si envías solo la cédula → trae todo mezclado (útil para ver todo)
  * Si envías también el contratoPadreId → trae solo un empeño específico
  */
-router.get("/cliente/:cedula", async (req, res) => {
+router.get("/cliente/:cedula", authJWT, checkRole("admin", "empleado"), async (req, res) => {
   
   try {
     const { cedula } = req.params;

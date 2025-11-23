@@ -50,10 +50,21 @@ const historialSchema = new mongoose.Schema({
     required: true,
   },
 
-  detalle: {
-    type: Object,
-    default: {},
+detalle: {
+  infoFinanciera: {
+    capital: { type: Number, default: 0 },
+    interes: { type: Number, default: 0 },
+    fecha: { type: Date, default: null }
   },
+  infoContrato: {
+    factura: { type: Number, default: null },
+    descripcionPrenda: { type: String, default: "" },
+    kilataje: { type: String, default: "" }
+  }
+},
+
+
+
   fechaReal: { type: Date, required: true },       // ← hora real de Colombia
 
   fecha: {

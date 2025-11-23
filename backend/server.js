@@ -7,20 +7,12 @@ import capitalRoutes from "./routes/capital.js"
 import historialRoutes from "./routes/historial.js"
 import contabilidadRoutes from "./routes/contabilidad.js"
 import cierreCajaRoutes from "./routes/cierrecaja.js"
+import authRoutes from "./routes/auth.js"
 
 
 dotenv.config();
 
 const app = express();
-
-// 🟢 Agrega esto antes de tus rutas
-app.use(express.json());
-app.use("/api/empenos", empenoRoutes);
-app.use("/api/capital", capitalRoutes);
-app.use("/api/historial", historialRoutes)
-app.use("/api/contabilidad", contabilidadRoutes)
-app.use("/api/cierrecaja", cierreCajaRoutes)
-
 
 app.use(
   cors({
@@ -29,6 +21,18 @@ app.use(
     credentials: true,
   })
 );
+
+// 🟢 Agrega esto antes de tus rutas
+app.use(express.json());
+app.use("/api/auth", authRoutes);
+app.use("/api/empenos", empenoRoutes);
+app.use("/api/capital", capitalRoutes);
+app.use("/api/historial", historialRoutes)
+app.use("/api/contabilidad", contabilidadRoutes)
+app.use("/api/cierrecaja", cierreCajaRoutes)
+
+
+
 
 // Conexión a MongoDB
 mongoose
