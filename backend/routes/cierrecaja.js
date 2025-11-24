@@ -97,6 +97,10 @@ router.post(
         .filter((m) => m.tipoMovimiento === "liquidacion")
         .reduce((a, b) => a + (b.monto || 0), 0);
 
+      const interesesdeDesempeño = movimientosHoy
+        .filter((m) => m.tipoMovimiento === "liquidacion")
+        .reduce((a, b) => a + (b.interesesdeDesempeño || 0), 0);
+
       const facturasDesempenadas = movimientosHoy.filter(
         (m) => m.tipoMovimiento === "liquidacion"
       ).length;
@@ -105,11 +109,16 @@ router.post(
         .filter((m) => m.tipoMovimiento === "abono_interes")
         .reduce((a, b) => a + (b.monto || 0), 0);
 
+      // const abonosCapital = movimientosHoy
+      //   .filter((m) => m.tipoMovimiento === "renovacion" || m.tipoMovimiento === "abono_capital")
+      //   .reduce((a, b) => a + (b.monto || 0), 0);
+
       const abonosIntereses = interesesGenerados;
 
       // 🟢 EGRESO: préstamos del día (empeños)
       const empenosHoy = movimientosHoy.filter(
-        (m) => m.tipoMovimiento === "empeno"
+        (m) =>
+          m.tipoMovimiento === "empeno" || m.tipoMovimiento === "renovacion"
       );
 
       const seen = new Set();
@@ -117,9 +126,20 @@ router.post(
       let numeroEmpeños = 0;
 
       for (const m of empenosHoy) {
-        if (!seen.has(String(m.contratoId))) {
-          seen.add(String(m.contratoId));
-          capitalPrestado += m.monto || 0;
+        // Elegir id único del registro: nuevo contrato si existe
+        const uniqueId = m.contratoNuevoId
+          ? String(m.contratoNuevoId)
+          : String(m.contratoId);
+
+        if (!seen.has(uniqueId)) {
+          seen.add(uniqueId);
+
+          if (m.tipoMovimiento === "empeno") {
+            capitalPrestado += m.monto || 0;
+          } else if (m.tipoMovimiento === "renovacion") {
+            capitalPrestado += m.saldoFinal || 0;
+          }
+
           numeroEmpeños++;
         }
       }
@@ -144,12 +164,15 @@ router.post(
       //  TOTALES DEL DÍA
       // =============================
 
+      // INGRESOS
       const totalIngresos =
         capitalDesempenado +
-        interesesGenerados +
+        interesesdeDesempeño +
+        abonosIntereses +
         otrosIngresos +
         totalInyeccionesHoy;
 
+        // EGRESOS 
       const totalEgresos =
         capitalPrestado +
         gastosGenerales +
@@ -177,8 +200,8 @@ router.post(
         fechaReal: timestamp,
         saldoAnterior,
         capitalDesempenado,
+        interesesdeDesempeño,
         facturasDesempenadas,
-        interesesGenerados,
         abonosIntereses,
         otrosIngresos,
         totalIngresos,

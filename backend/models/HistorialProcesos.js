@@ -27,7 +27,7 @@ const historialSchema = new mongoose.Schema({
     enum: [
       "empeno",
       "abono_interes",
-      "abono_capital",
+      "interesesDesempeno",
       "renovacion",
       "liquidacion",
       "desempeno",
@@ -39,6 +39,10 @@ const historialSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
+  interesesdeDesempeño: {
+    type: Number,
+    default: 0,
+  },  
 
   saldoFinal: {
     type: Number,

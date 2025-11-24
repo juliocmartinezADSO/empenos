@@ -265,7 +265,7 @@ router.post(
       }
 
       // ==========================================
-      // 1️⃣ Cálculo de meses transcurridos
+      // 1️⃣ Cálculo de meses transcurridos desde el inicio del empeño
       // ==========================================
       const ms = Date.now() - new Date(empeño.fechaInicio).getTime();
       const dias = ms / (1000 * 60 * 60 * 24);
@@ -279,12 +279,12 @@ router.post(
 
       const interesesPendientes = interesesTotales - interesesPagados;
       // ==========================================
-      // 2️⃣ Detectar liquidación TOTAL en un SOLO pago
+      // 2️⃣ Detectar si la liquidación TOTAL se hace en un  SOLO pago
       // ==========================================
       const capitalPendiente = empeño.valorPrestamo;
       const totalParaLiquidar = interesesPendientes + capitalPendiente;
 
-      // ❌ Bloquear pagos mayores a lo que realmente se debe
+      // ❌ Bloquear pagos que excedan el monto total pendiente
       if (abono > totalParaLiquidar) {
         return res.status(400).json({
           message: "El abono excede el valor total pendiente.",
@@ -305,7 +305,8 @@ router.post(
         // Después de procesar el desempeño...
         await registrarMovimientoCapital({
           tipoMovimiento: "liquidacion",
-          monto: abono,
+          monto: capitalPendiente,
+          interesesdeDesempeño: interesesPendientes,
           descripcion: `Liquidación total del contrato ${empeño.numeroFactura}`,
         });
 
@@ -317,7 +318,8 @@ router.post(
           cedulaCliente: empeño.cliente.cedula,
 
           tipoMovimiento: "liquidacion",
-          monto: abono,
+          monto: capitalPendiente,
+          interesesdeDesempeño: interesesPendientes,
           saldoFinal: 0,
           descripcion: `Liquidación total del contrato ${empeño.numeroFactura}`,
 
@@ -344,7 +346,8 @@ router.post(
       }
 
       // ==========================================
-      // 3️⃣ NUEVA VALIDACIÓN — pago mínimo: 1 mes
+      // 3️⃣ NUEVA VALIDACIÓN — pago mínimo permitido: al menos 1 mes de interés
+
       // ==========================================
       if (abono < empeño.interesMensual) {
         return res.status(400).json({
@@ -353,7 +356,7 @@ router.post(
       }
 
       // ==========================================
-      // 4️⃣ Calcular cuántos meses paga realmente
+      // 4️⃣ Calcular cuántos meses de interés se están pagando realmente
       // ==========================================
       const mesesPagados = Math.floor(abono / empeño.interesMensual);
 
@@ -366,6 +369,111 @@ router.post(
       // Parte del abono que queda después de pagar los intereses
       let restante = abono - interesesAPagar;
 
+      // ==========================================
+// 5️⃣ Caso: pago mayor a intereses pero menor al total → liquidación parcial y renovación
+// ==========================================
+if (restante > 0 && abono < totalParaLiquidar) {
+  // Registrar intereses pagados como abono normal
+  empeño.abonos.push({
+    fecha: fechaOp,
+    monto: interesesAPagar,
+    tipo: "interes",
+  });
+
+  // Actualizar capital con intereses pagados + abono a capital
+  const capital = await Capital.findOne();
+  capital.saldo += abono; // todo el abono
+  await capital.save();
+
+  // Liquidar contrato anterior
+  empeño.estado = "liquidado";
+  await empeño.save();
+
+  // Registrar intereses pagados en liquidación parcial usando interesesdeDesempeño
+  await registrarMovimientoCapital({
+    tipoMovimiento: "liquidacion",
+    monto: restante, // abono a capital
+    interesesdeDesempeño: interesesAPagar,
+    descripcion: `Liquidación parcial del contrato ${empeño.numeroFactura}`,
+  });
+
+  // Crear nuevo contrato (renovación) con el capital pendiente
+  const nuevoCapital = empeño.valorPrestamo - restante;
+
+  // ==========================================
+// Registrar liquidación parcial antes de la renovación
+// ==========================================
+await HistorialProcesos.create({
+  contratoId: empeño._id,
+  contratoNuevoId: null,
+  contratoPadreId: empeño.contratoPadreId,
+  cedulaCliente: empeño.cliente.cedula,
+
+  tipoMovimiento: "liquidacion",
+  monto: empeño.valorPrestamo, // abono a capital
+  interesesdeDesempeño: interesesAPagar, // no se toca
+  saldoFinal: nuevoCapital,
+  descripcion: `Liquidación parcial del contrato ${empeño.numeroFactura} antes de renovación`,
+  detalle: {
+    infoFinanciera: {
+      capital: restante,
+      interes: 0,
+      fecha: fechaOp,
+    },
+    infoContrato: {
+      factura: empeño.numeroFactura,
+      descripcion: empeño.descripcionPrenda,
+      kilataje: empeño.kilataje,
+    },
+  },
+  fechaReal: timestamp,
+});
+
+  const nuevoContrato = new Empeno({
+    cliente: empeño.cliente,
+    numeroFactura: await generarNuevaFactura(),
+    descripcionPrenda: empeño.descripcionPrenda,
+    kilataje: empeño.kilataje,
+    valorPrestamo: nuevoCapital,
+    interesMensual: calcularInteresMensual(nuevoCapital),
+    fechaInicio: fechaOp,
+    fechaReal: timestamp,
+    estado: "activo",
+    abonos: [],
+    contratoPadreId: empeño.contratoPadreId,
+  });
+
+  await nuevoContrato.save();
+
+  // Historial de renovación
+  await HistorialProcesos.create({
+    contratoId: empeño._id,
+    contratoNuevoId: nuevoContrato._id,
+    contratoPadreId: empeño.contratoPadreId,
+    cedulaCliente: empeño.cliente.cedula,
+    tipoMovimiento: "renovacion",
+    monto: restante,
+    saldoFinal: nuevoCapital,
+    descripcion: `Renovación del contrato ${empeño.numeroFactura} → nuevo contrato ${nuevoContrato.numeroFactura} por valor ${nuevoCapital}`,
+    detalle: {
+      infoFinanciera: { capital: restante, interes: interesesAPagar, fecha: fechaOp },
+      infoContrato: {
+        factura: nuevoContrato.numeroFactura,
+        descripcionPrenda: empeño.descripcionPrenda,
+        kilataje: empeño.kilataje,
+      },
+    },
+    fechaReal: timestamp,
+  });
+
+  return res.json({
+    mensaje: "Contrato liquidado parcialmente y renovado.",
+    contratoAnterior: empeño,
+    nuevoContrato,
+  });
+}
+
+
       // Registrar los intereses pagados
       if (interesesAPagar > 0) {
         empeño.abonos.push({
@@ -373,6 +481,8 @@ router.post(
           monto: interesesAPagar,
           tipo: "interes",
         });
+
+        //TRabajar aquiii....
 
         const capital = await Capital.findOne();
         capital.saldo += interesesAPagar;
@@ -413,7 +523,7 @@ router.post(
       }
 
       // ==========================================
-      // 4️⃣ Si solo se pagaron intereses
+      // 5️⃣ Caso especial: Si solo se pagaron intereses (no se toca capital)
       // ==========================================
       if (restante === 0) {
         // Cálculo actualizado de intereses después del pago
@@ -447,13 +557,13 @@ router.post(
       }
 
       // ==========================================
-      // 5️⃣ Registrar abono a capital
+      // 6️⃣ Registrar el abono restante como pago a capital
       // ==========================================
 
       const nuevoCapital = empeño.valorPrestamo - restante;
 
       // ==========================================
-      // 6️⃣ Si se pagó todo el capital → liquidar
+      // 7️⃣ Si el pago a capital cubre todo el capital pendiente → liquidar contrato
       // ==========================================
       if (nuevoCapital <= 0) {
         empeño.estado = "liquidado";
@@ -501,7 +611,7 @@ router.post(
       }
 
       // ==========================================
-      // 7️⃣ Crear nuevo contrato (renovación)
+      // 8️⃣ Si no se cubrió todo el capital, crear un nuevo contrato (renovación)
       // ==========================================
       empeño.estado = "liquidado";
       await empeño.save();

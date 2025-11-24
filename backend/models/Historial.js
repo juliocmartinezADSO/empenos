@@ -23,6 +23,11 @@ const historialSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
+  interesesdeDesempeño: {
+    type: Number,
+    default: 0,
+  },
+  
   fechaReal: { type: Date, required: true }, // ← hora real de Colombia
 
   fecha: {

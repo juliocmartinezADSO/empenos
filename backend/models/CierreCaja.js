@@ -16,6 +16,7 @@ const cierreCajaSchema = new mongoose.Schema({
   facturasDesempenadas: { type: Number, default: 0 },
 
   interesesGenerados: { type: Number, default: 0 },
+  interesesdeDesempeño: { type: Number, default: 0 },
   abonosIntereses: { type: Number, default: 0 },
   totalRetirosHoy: { type: Number, default: 0 },
 
