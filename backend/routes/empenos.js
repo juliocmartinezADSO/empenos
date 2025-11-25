@@ -8,13 +8,14 @@ import Historial from "../models/Historial.js";
 import HistorialProcesos from "../models/HistorialProcesos.js";
 import fechaOperacion from "../middlewares/fechaOperacion.js";
 import { registrarMovimientoCapital } from "../helpers/movimientoCapital.js";
+import { obtenerCapital } from "../helpers/capital.js";
 
 const router = express.Router();
 
 //Inicializar capital
 async function inicializarCapital() {
   const timestamp = new Date();
-  const existe = await Capital.findOne();
+  const existe = await obtenerCapital();
   if (!existe) {
     await new Capital({ saldoInicial: 100000000, saldo: 100000000 }).save(); // 100 millones
     console.log("Capital inicial creado: 100.000.000");
@@ -79,7 +80,7 @@ router.post(
       } = req.body;
 
       // 🔹 Obtener capital actual
-      const capital = await Capital.findOne();
+      const capital = await obtenerCapital();
       if (!capital) {
         return res
           .status(500)
@@ -294,7 +295,7 @@ router.post(
 
       if (abono === totalParaLiquidar) {
         // Actualizar capital recibiendo el capital prestado
-        const capital = await Capital.findOne();
+        const capital = await obtenerCapital();
         capital.saldo += capitalPendiente + interesesPendientes;
         await capital.save();
 
@@ -349,7 +350,8 @@ router.post(
       // 3️⃣ NUEVA VALIDACIÓN — pago mínimo permitido: al menos 1 mes de interés
 
       // ==========================================
-      if (abono < empeño.interesMensual) {
+
+      if (abono < empeño.interesMensual && interesesPendientes > 0) {
         return res.status(400).json({
           error: `El pago mínimo es 1 mes de interés: ${empeño.interesMensual} pesos.`,
         });
@@ -369,110 +371,140 @@ router.post(
       // Parte del abono que queda después de pagar los intereses
       let restante = abono - interesesAPagar;
 
+      // =========================================================
+      // 🟦 NUEVA REGLA: Mientras existan intereses pendientes,
+      //      el abono SOLO puede ser por meses completos.
+      //      NO se permite que quede sobrante si aún hay intereses.
+      // =========================================================
+
+      if (interesesPendientes > 0) {
+        // Cuánto del abono corresponde EXACTAMENTE a intereses completos
+        const abonoSoloParaIntereses = mesesPagados * empeño.interesMensual;
+
+        // Caso ilegal:
+        // - El cliente paga meses completos (ej: 2 meses = 20.000)
+        // - PERO queda sobrante (ej: 3.000)
+        // - Y ese sobrante NO puede ir al capital porque aún debe intereses
+        if (
+          abonoSoloParaIntereses < abono &&
+          abonoSoloParaIntereses < interesesPendientes
+        ) {
+          return res.status(400).json({
+            error: `Solo puede pagar meses completos de interés: ${empeño.interesMensual} por mes.`,
+            valoresValidos: `Puede pagar: ${empeño.interesMensual}, ${
+              2 * empeño.interesMensual
+            }, ${3 * empeño.interesMensual}, ...`,
+          });
+        }
+      }
+
       // ==========================================
-// 5️⃣ Caso: pago mayor a intereses pero menor al total → liquidación parcial y renovación
-// ==========================================
-if (restante > 0 && abono < totalParaLiquidar) {
-  // Registrar intereses pagados como abono normal
-  empeño.abonos.push({
-    fecha: fechaOp,
-    monto: interesesAPagar,
-    tipo: "interes",
-  });
+      // 5️⃣ Caso: pago mayor a intereses pero menor al total → liquidación parcial y renovación
+      // ==========================================
+      if (restante > 0 && abono < totalParaLiquidar) {
+        // Registrar intereses pagados como abono normal
+        empeño.abonos.push({
+          fecha: fechaOp,
+          monto: interesesAPagar,
+          tipo: "interes",
+        });
 
-  // Actualizar capital con intereses pagados + abono a capital
-  const capital = await Capital.findOne();
-  capital.saldo += abono; // todo el abono
-  await capital.save();
+        // Actualizar capital con intereses pagados + abono a capital
+        const capital = await obtenerCapital();
+        capital.saldo += abono; // todo el abono
+        await capital.save();
 
-  // Liquidar contrato anterior
-  empeño.estado = "liquidado";
-  await empeño.save();
+        // Liquidar contrato anterior
+        empeño.estado = "liquidado";
+        await empeño.save();
 
-  // Registrar intereses pagados en liquidación parcial usando interesesdeDesempeño
-  await registrarMovimientoCapital({
-    tipoMovimiento: "liquidacion",
-    monto: restante, // abono a capital
-    interesesdeDesempeño: interesesAPagar,
-    descripcion: `Liquidación parcial del contrato ${empeño.numeroFactura}`,
-  });
+        // Registrar intereses pagados en liquidación parcial usando interesesdeDesempeño
+        await registrarMovimientoCapital({
+          tipoMovimiento: "liquidacion",
+          monto: restante, // abono a capital
+          interesesdeDesempeño: interesesAPagar,
+          descripcion: `Liquidación parcial del contrato ${empeño.numeroFactura}`,
+        });
 
-  // Crear nuevo contrato (renovación) con el capital pendiente
-  const nuevoCapital = empeño.valorPrestamo - restante;
+        // Crear nuevo contrato (renovación) con el capital pendiente
+        const nuevoCapital = empeño.valorPrestamo - restante;
 
-  // ==========================================
-// Registrar liquidación parcial antes de la renovación
-// ==========================================
-await HistorialProcesos.create({
-  contratoId: empeño._id,
-  contratoNuevoId: null,
-  contratoPadreId: empeño.contratoPadreId,
-  cedulaCliente: empeño.cliente.cedula,
+        // ==========================================
+        // Registrar liquidación parcial antes de la renovación
+        // ==========================================
+        await HistorialProcesos.create({
+          contratoId: empeño._id,
+          contratoNuevoId: null,
+          contratoPadreId: empeño.contratoPadreId,
+          cedulaCliente: empeño.cliente.cedula,
 
-  tipoMovimiento: "liquidacion",
-  monto: empeño.valorPrestamo, // abono a capital
-  interesesdeDesempeño: interesesAPagar, // no se toca
-  saldoFinal: nuevoCapital,
-  descripcion: `Liquidación parcial del contrato ${empeño.numeroFactura} antes de renovación`,
-  detalle: {
-    infoFinanciera: {
-      capital: restante,
-      interes: 0,
-      fecha: fechaOp,
-    },
-    infoContrato: {
-      factura: empeño.numeroFactura,
-      descripcion: empeño.descripcionPrenda,
-      kilataje: empeño.kilataje,
-    },
-  },
-  fechaReal: timestamp,
-});
+          tipoMovimiento: "liquidacion",
+          monto: empeño.valorPrestamo, // abono a capital
+          interesesdeDesempeño: interesesAPagar, // no se toca
+          saldoFinal: nuevoCapital,
+          descripcion: `Liquidación parcial del contrato ${empeño.numeroFactura} antes de renovación`,
+          detalle: {
+            infoFinanciera: {
+              capital: restante,
+              interes: 0,
+              fecha: fechaOp,
+            },
+            infoContrato: {
+              factura: empeño.numeroFactura,
+              descripcion: empeño.descripcionPrenda,
+              kilataje: empeño.kilataje,
+            },
+          },
+          fechaReal: timestamp,
+        });
 
-  const nuevoContrato = new Empeno({
-    cliente: empeño.cliente,
-    numeroFactura: await generarNuevaFactura(),
-    descripcionPrenda: empeño.descripcionPrenda,
-    kilataje: empeño.kilataje,
-    valorPrestamo: nuevoCapital,
-    interesMensual: calcularInteresMensual(nuevoCapital),
-    fechaInicio: fechaOp,
-    fechaReal: timestamp,
-    estado: "activo",
-    abonos: [],
-    contratoPadreId: empeño.contratoPadreId,
-  });
+        const nuevoContrato = new Empeno({
+          cliente: empeño.cliente,
+          numeroFactura: await generarNuevaFactura(),
+          descripcionPrenda: empeño.descripcionPrenda,
+          kilataje: empeño.kilataje,
+          valorPrestamo: nuevoCapital,
+          interesMensual: calcularInteresMensual(nuevoCapital),
+          fechaInicio: fechaOp,
+          fechaReal: timestamp,
+          estado: "activo",
+          abonos: [],
+          contratoPadreId: empeño.contratoPadreId,
+        });
 
-  await nuevoContrato.save();
+        await nuevoContrato.save();
 
-  // Historial de renovación
-  await HistorialProcesos.create({
-    contratoId: empeño._id,
-    contratoNuevoId: nuevoContrato._id,
-    contratoPadreId: empeño.contratoPadreId,
-    cedulaCliente: empeño.cliente.cedula,
-    tipoMovimiento: "renovacion",
-    monto: restante,
-    saldoFinal: nuevoCapital,
-    descripcion: `Renovación del contrato ${empeño.numeroFactura} → nuevo contrato ${nuevoContrato.numeroFactura} por valor ${nuevoCapital}`,
-    detalle: {
-      infoFinanciera: { capital: restante, interes: interesesAPagar, fecha: fechaOp },
-      infoContrato: {
-        factura: nuevoContrato.numeroFactura,
-        descripcionPrenda: empeño.descripcionPrenda,
-        kilataje: empeño.kilataje,
-      },
-    },
-    fechaReal: timestamp,
-  });
+        // Historial de renovación
+        await HistorialProcesos.create({
+          contratoId: empeño._id,
+          contratoNuevoId: nuevoContrato._id,
+          contratoPadreId: empeño.contratoPadreId,
+          cedulaCliente: empeño.cliente.cedula,
+          tipoMovimiento: "renovacion",
+          monto: restante,
+          saldoFinal: nuevoCapital,
+          descripcion: `Renovación del contrato ${empeño.numeroFactura} → nuevo contrato ${nuevoContrato.numeroFactura} por valor ${nuevoCapital}`,
+          detalle: {
+            infoFinanciera: {
+              capital: restante,
+              interes: interesesAPagar,
+              fecha: fechaOp,
+            },
+            infoContrato: {
+              factura: nuevoContrato.numeroFactura,
+              descripcionPrenda: empeño.descripcionPrenda,
+              kilataje: empeño.kilataje,
+            },
+          },
+          fechaReal: timestamp,
+        });
 
-  return res.json({
-    mensaje: "Contrato liquidado parcialmente y renovado.",
-    contratoAnterior: empeño,
-    nuevoContrato,
-  });
-}
-
+        return res.json({
+          mensaje: "Contrato liquidado parcialmente y renovado.",
+          contratoAnterior: empeño,
+          nuevoContrato,
+        });
+      }
 
       // Registrar los intereses pagados
       if (interesesAPagar > 0) {
@@ -484,7 +516,7 @@ await HistorialProcesos.create({
 
         //TRabajar aquiii....
 
-        const capital = await Capital.findOne();
+        const capital = await obtenerCapital();
         capital.saldo += interesesAPagar;
         await capital.save();
 

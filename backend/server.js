@@ -2,6 +2,8 @@ import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
 import dotenv from "dotenv";
+
+// Importación de rutas
 import empenoRoutes from "./routes/empenos.js";
 import capitalRoutes from "./routes/capital.js"
 import historialRoutes from "./routes/historial.js"
@@ -14,6 +16,7 @@ dotenv.config();
 
 const app = express();
 
+//Middlewares globales
 app.use(
   cors({
     origin: "http://localhost:5173", // permite peticiones desde tu frontend
@@ -24,6 +27,8 @@ app.use(
 
 // 🟢 Agrega esto antes de tus rutas
 app.use(express.json());
+
+// Rutas
 app.use("/api/auth", authRoutes);
 app.use("/api/empenos", empenoRoutes);
 app.use("/api/capital", capitalRoutes);
@@ -35,6 +40,12 @@ app.use("/api/cierrecaja", cierreCajaRoutes)
 
 
 // Conexión a MongoDB
+
+  // if (!process.env.MONGO_URI) {
+  //   console.error("❌ ERROR: falta MONGO_URI en el archivo .env");
+  //   process.exit(1);
+  // }
+
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => console.log("✅ Conectado a MongoDB"))

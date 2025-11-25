@@ -5,7 +5,6 @@ import authJWT from "../middlewares/authJWT.js";
 import checkRole from "../middlewares/checkRole.js";
 import CierreCaja from "../models/CierreCaja.js";
 import HistorialProcesos from "../models/HistorialProcesos.js";
-import Empeno from "../models/Empeno.js";
 import Capital from "../models/Capital.js";
 import Historial from "../models/Historial.js";
 import fechaOperacion from "../middlewares/fechaOperacion.js";
